@@ -1,7 +1,23 @@
+//! User-space stack management implementation
+//!
+//! This module provides functionality for managing user-space stacks, including:
+//! - Stack allocation and initialization
+//! - Safe data pushing operations
+//! - String handling on the stack
+//! - Proper alignment management
+//!
+//! # Features
+//! - No standard library dependency
+//! - Automatic alignment handling
+//! - Safe memory operations
+//! - Support for various data types
+//!
+
 #![no_std]
 
 use core::{mem::align_of, mem::size_of_val};
 
+/// Represents a user-space stack with automatic alignment management
 pub struct UserStack {
     _base: usize,
     sp: usize,
@@ -9,6 +25,7 @@ pub struct UserStack {
 }
 
 impl UserStack {
+    /// Creates a new user stack instance
     pub fn new(base: usize, ptr: usize) -> Self {
         Self {
             _base: base,
@@ -17,10 +34,12 @@ impl UserStack {
         }
     }
 
+    /// Returns the current stack pointer position
     pub fn get_sp(&self) -> usize {
         self.sp
     }
 
+    /// Pushes an array of data onto the stack
     pub fn push<T: Copy>(&mut self, data: &[T]) {
         let origin = self.sp;
         self.sp -= size_of_val(data);
@@ -31,6 +50,8 @@ impl UserStack {
                 .copy_from_slice(data);
         }
     }
+
+    /// Pushes a string onto the stack, adding a null terminator
     pub fn push_str(&mut self, str: &str) -> usize {
         self.push(&[b'\0']);
         self.push(str.as_bytes());
@@ -38,6 +59,7 @@ impl UserStack {
     }
 }
 
+/// Initializes the user stack subsystem
 pub fn init() {
     axconfig::init_once!();
     axalloc::init();

@@ -1,3 +1,17 @@
+//! File system management implementation
+//!
+//! This module provides filesystem management functionality, including:
+//! - File and directory operations
+//! - Path manipulation and resolution
+//! - Permission and ownership control
+//! - Process filesystem context management
+//!
+//! # Core Components
+//! - [`FsStruct`]: Main filesystem context structure for a process
+//! - File and directory manipulation functions
+//! - Path resolution and canonicalization
+//!
+
 #![no_std]
 
 #[macro_use]
@@ -12,16 +26,24 @@ use axfs_vfs::RootDirectory;
 use axtype::O_NOFOLLOW;
 use lazy_init::LazyInit;
 
+/// Represents the filesystem context for a process
 pub struct FsStruct {
+    /// Number of processes sharing this filesystem context
     pub users: i32,
+    /// Indicates if the process is currently executing
     pub in_exec: bool,
+    /// Current working directory path
     curr_path: String,
+    /// Reference to current working directory node
     curr_dir: Option<VfsNodeRef>,
+    /// Reference to root directory
     root_dir: Option<Arc<RootDirectory>>,
+    /// File creation mask
     umask: u32,
 }
 
 impl FsStruct {
+    // Creates a new filesystem context with default values
     pub fn new() -> Self {
         Self {
             users: 1,
@@ -33,16 +55,19 @@ impl FsStruct {
         }
     }
 
+    /// Initializes the filesystem context with a root directory
     pub fn init(&mut self, root_dir: Arc<RootDirectory>) {
         self.root_dir = Some(root_dir);
         self.curr_dir = Some(self.root_dir.as_ref().unwrap().clone());
         self.curr_path = "/".into();
     }
 
+    /// Sets the file creation mask
     pub fn set_umask(&mut self, mode: u32) {
         self.umask = mode;
     }
 
+    /// Copies filesystem context from another process
     pub fn copy_fs_struct(&mut self, fs: Arc<SpinLock<FsStruct>>) {
         let locked_fs = &fs.lock();
         self.root_dir = locked_fs.root_dir.as_ref().map(|root_dir| root_dir.clone());
@@ -50,6 +75,7 @@ impl FsStruct {
         self.curr_path = locked_fs.curr_path.clone();
     }
 
+    /// Copies filesystem context from another process
     fn parent_node_of(&self, dir: Option<&VfsNodeRef>, path: &str) -> VfsNodeRef {
         if path.starts_with('/') {
             assert!(self.root_dir.is_some());
@@ -59,6 +85,7 @@ impl FsStruct {
         }
     }
 
+    /// Looks up a file or directory in the filesystem
     pub fn lookup(&self, dir: Option<&VfsNodeRef>, path: &str, flags: i32) -> AxResult<VfsNodeRef> {
         if path.is_empty() {
             return ax_err!(NotFound);
@@ -71,6 +98,7 @@ impl FsStruct {
         }
     }
 
+    /// Creates a hard link to an existing file
     pub fn create_link(
         &self, dir: Option<&VfsNodeRef>,
         path: &str, node: VfsNodeRef
@@ -85,6 +113,7 @@ impl FsStruct {
         parent.link(path, node)
     }
 
+    /// Creates a symbolic link
     pub fn create_symlink(
         &self, dir: Option<&VfsNodeRef>,
         path: &str, target: &str,
@@ -100,6 +129,7 @@ impl FsStruct {
         parent.symlink(path, target, uid, gid, mode)
     }
 
+    /// Creates a new file or directory
     pub fn create_file(&self, dir: Option<&VfsNodeRef>, path: &str, ty: VfsNodeType, uid: u32, gid: u32, mode: i32) -> AxResult<VfsNodeRef> {
         info!("create_file: {} ..", path);
         if path.is_empty() {
@@ -114,6 +144,7 @@ impl FsStruct {
         Ok(node)
     }
 
+    /// Creates a new directory
     pub fn create_dir(&self, dir: Option<&VfsNodeRef>, path: &str, uid: u32, gid: u32, mode: i32) -> AxResult {
         match self.lookup(dir, path, 0) {
             Ok(_) => ax_err!(AlreadyExists),
@@ -122,14 +153,17 @@ impl FsStruct {
         }
     }
 
+    /// Returns reference to the root directory
     pub fn root_dir(&self) -> Option<Arc<RootDirectory>> {
         self.root_dir.clone()
     }
 
+    /// Returns reference to the current working directory
     pub fn current_dir(&self) -> AxResult<String> {
         Ok(self.curr_path.clone())
     }
 
+    /// Returns absolute path from a possibly relative path
     pub fn absolute_path(&self, path: &str) -> AxResult<String> {
         if path.starts_with('/') {
             Ok(axfs_vfs::path::canonicalize(path))
@@ -139,6 +173,7 @@ impl FsStruct {
         }
     }
 
+    /// Changes current working directory
     pub fn set_current_dir(&mut self, path: &str) -> AxResult {
         let mut abs_path = self.absolute_path(path)?;
         if !abs_path.ends_with('/') {
@@ -163,6 +198,7 @@ impl FsStruct {
         }
     }
 
+    /// Removes a file
     pub fn remove_file(&self, dir: Option<&VfsNodeRef>, path: &str) -> AxResult {
         let node = self.lookup(dir, path, O_NOFOLLOW)?;
         let attr = node.get_attr()?;
@@ -173,6 +209,7 @@ impl FsStruct {
         }
     }
 
+    /// Removes a directory
     pub fn remove_dir(&self, dir: Option<&VfsNodeRef>, path: &str) -> AxResult {
         if path.is_empty() {
             return ax_err!(NotFound);
@@ -201,6 +238,8 @@ impl FsStruct {
             self.parent_node_of(dir, path).remove(path)
         }
     }
+
+    /// Renames a file or directory
     pub fn rename(&self, old: &str, new: &str) -> AxResult {
         if self.parent_node_of(None, new).lookup(new, 0).is_ok() {
             warn!("dst file already exist, now remove it");
@@ -210,10 +249,12 @@ impl FsStruct {
     }
 }
 
+/// Returns reference to the initialized filesystem context
 pub fn init_fs() -> Arc<SpinLock<FsStruct>> {
     INIT_FS.clone()
 }
 
+/// Initializes the filesystem subsystem
 pub fn init(cpu_id: usize, dtb_pa: usize) {
     axconfig::init_once!();
     info!("Initialize fstree ...");

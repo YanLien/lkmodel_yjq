@@ -1,3 +1,17 @@
+//! Run queue and task scheduling implementation
+//!
+//! This module implements the run queue mechanism for task scheduling, including:
+//! - Task run queue management
+//! - Scheduling primitives 
+//! - Task state transitions
+//! - CPU scheduling decisions
+//!
+//! # Core Features
+//! - Task enqueuing and dequeuing
+//! - Priority-based scheduling
+//! - Task yielding and preemption
+//! - Timer-based scheduling events
+
 #![no_std]
 
 use alloc::boxed::Box;
@@ -14,6 +28,7 @@ extern crate alloc;
 mod run_queue;
 pub use run_queue::AxRunQueue;
 
+/// Initializes the run queue and scheduling system
 pub fn init(cpu_id: usize, dtb_pa: usize) {
     axconfig::init_once!();
 
@@ -23,20 +38,24 @@ pub fn init(cpu_id: usize, dtb_pa: usize) {
     RUN_QUEUE.init_by(AxRunQueue::new(idle));
 }
 
+/// Returns the run queue associated with a task
 pub fn task_rq(_task: &CtxRef) -> &SpinNoIrq<AxRunQueue> {
     &RUN_QUEUE
 }
 
+/// Voluntarily yields the current task's execution time
 pub fn yield_now() {
     let ctx = taskctx::current_ctx();
     let rq = task_rq(&ctx);
     rq.lock().resched(false);
 }
 
+/// Forces unlock of the run queue lock
 pub fn force_unlock() {
     unsafe { RUN_QUEUE.force_unlock() }
 }
 
+/// Creates and enqueues a new task with a closure
 pub fn spawn_task_raw<F>(tid: Tid, f: F) -> Arc<SchedInfo>
 where
     F: FnOnce() + 'static
@@ -45,6 +64,7 @@ where
     Arc::new(spawn_task(tid, entry))
 }
 
+/// Creates a new task with the specified entry point
 pub fn spawn_task(tid: Tid, entry: Option<*mut dyn FnOnce()>) -> SchedInfo {
     let mut sched_info = SchedInfo::new();
     sched_info.init_tid(tid);

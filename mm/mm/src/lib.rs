@@ -1,3 +1,22 @@
+//! Memory management implementation for a no_std environment
+//! 
+//! This module provides virtual memory management functionality, including:
+//! - Virtual memory areas (VMA) management
+//! - Page table operations
+//! - Memory mapping and unmapping
+//! - Process memory space management
+//! 
+//! # Features
+//! - No standard library dependency
+//! - Support for file-backed mappings
+//! - Process memory isolation
+//! - Memory permission control
+//!
+//! # Core Components
+//! - [`MmStruct`]: Main memory management structure for a process
+//! - [`VmAreaStruct`]: Virtual memory area descriptor
+//! 
+
 #![no_std]
 #![feature(btree_cursors)]
 
@@ -28,19 +47,35 @@ static MM_UNIQUE_ID: AtomicUsize = AtomicUsize::new(1);
  * vm_flags in vm_area_struct, see mm_types.h.
  * When changing, update also include/trace/events/mmflags.h
  */
-pub const VM_NONE: usize =   0x00000000;
-pub const VM_READ: usize =   0x00000001;
-pub const VM_WRITE: usize =  0x00000002;
-pub const VM_EXEC: usize =   0x00000004;
+/// Memory management related constants for virtual memory flags
+/// These flags control memory area permissions and behaviors
+/// 
+/// No permissions
+pub const VM_NONE: usize = 0x00000000;
+/// Memory can be read
+pub const VM_READ: usize = 0x00000001;
+/// Memory can be written
+pub const VM_WRITE: usize = 0x00000002;
+/// Memory can be executed  
+pub const VM_EXEC: usize = 0x00000004;
+/// Memory is shared
 pub const VM_SHARED: usize = 0x00000008;
+/// May read in the future
 pub const VM_MAYREAD : usize = 0x00000010;
+/// May write in the future 
 pub const VM_MAYWRITE: usize = 0x00000020;
+/// May execute in the future
 pub const VM_MAYEXEC : usize = 0x00000040;
+/// May be shared in the future
 pub const VM_MAYSHARE: usize = 0x00000080;
+/// Stack segment that grows downward
 pub const VM_GROWSDOWN: usize = 0x00000100;
+/// Pages are locked in memory
 pub const VM_LOCKED: usize = 0x00002000;
+/// Synchronous page faults
 pub const VM_SYNC: usize = 0x00800000;
 
+/// Represents a virtual memory area with its properties and permissions
 #[derive(Clone)]
 pub struct VmAreaStruct {
     pub vm_start: usize,
@@ -51,6 +86,7 @@ pub struct VmAreaStruct {
 }
 
 impl VmAreaStruct {
+    /// Creates a new virtual memory area with specified parameters
     pub fn new(
         vm_start: usize,
         vm_end: usize,
@@ -72,6 +108,7 @@ impl VmAreaStruct {
     }
 }
 
+/// Represents the memory management structure for a process
 pub struct MmStruct {
     id: usize,
     pub vmas: BTreeMap<usize, VmAreaStruct>,
@@ -86,6 +123,7 @@ pub struct MmStruct {
 }
 
 impl MmStruct {
+    /// Creates a new memory management structure with default values
     pub fn new() -> Self {
         Self {
             id: MM_UNIQUE_ID.fetch_add(1, Ordering::SeqCst),
@@ -99,6 +137,8 @@ impl MmStruct {
         }
     }
 
+    /// Creates a deep copy of the current memory management structure
+    /// including all virtual memory areas and page mappings
     pub fn deep_dup(&self) -> Self {
         let mut pgd = pgd_alloc();
 
@@ -143,26 +183,33 @@ impl MmStruct {
         }
     }
 
+    /// Returns a reference to the page global directory
     pub fn pgd(&self) -> Arc<SpinNoIrq<PageTable>> {
         self.pgd.clone()
     }
 
+    /// Returns the physical address of the root page table
     pub fn root_paddr(&self) -> usize {
         self.pgd.lock().root_paddr().into()
     }
 
+    /// Returns the unique identifier of this memory management structure
     pub fn id(&self) -> usize {
         self.id
     }
 
+    
+    /// Returns the current program break(heap end) location
     pub fn brk(&self) -> usize {
         self.brk
     }
 
+    /// Sets a new program break(heap end) location
     pub fn set_brk(&mut self, brk: usize) {
         self.brk = brk;
     }
 
+    /// Maps a virtual address region to a physical address with specified flags
     pub fn map_region(&self, va: usize, pa: usize, len: usize, _uflags: usize) -> PagingResult {
         let flags =
             MappingFlags::READ | MappingFlags::WRITE | MappingFlags::EXECUTE | MappingFlags::USER;
@@ -171,6 +218,7 @@ impl MmStruct {
             .map_region(va.into(), pa.into(), len, flags, true)
     }
 
+    /// Unmaps a region of virtual memory
     pub fn unmap_region(&self, va: usize, len: usize) -> PagingResult {
         self.pgd.lock().unmap_region(va.into(), len)
     }

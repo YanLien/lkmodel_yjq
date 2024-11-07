@@ -1,3 +1,24 @@
+//! Memory mapping (mmap) implementation
+//!
+//! This module implements memory mapping functionality, including:
+//! - Virtual memory management
+//! - Memory protection controls
+//! - File-backed and anonymous mappings
+//! - Stack and heap management
+//!
+//! # Core Features
+//! - Memory mapping and unmapping
+//! - Permission management
+//! - Shared and private mappings
+//! - Page fault handling
+//! - Stack growth support
+//!
+//! # Constants and Flags
+//! - Protection flags (PROT_*)
+//! - Mapping flags (MAP_*)
+//! - Virtual memory flags (VM_*)
+//!
+
 #![no_std]
 #![feature(btree_cursors)]
 
@@ -28,12 +49,19 @@ use axhal::arch::flush_tlb;
 /// enforced gap between the expanding stack and other mappings.
 const STACK_GUARD_GAP: usize = 256 << PAGE_SHIFT;
 
-pub const PROT_READ: usize = 0x1;
-pub const PROT_WRITE: usize = 0x2;
-pub const PROT_EXEC: usize = 0x4;
-pub const PROT_SEM: usize = 0x8;
+/// Protection flag: No access
 pub const PROT_NONE: usize = 0x0;
+/// Protection flag: Read permission
+pub const PROT_READ: usize = 0x1;
+/// Protection flag: Write permission
+pub const PROT_WRITE: usize = 0x2;
+/// Protection flag: Execute permission
+pub const PROT_EXEC: usize = 0x4;
+/// Protection flag: Semaphore operations
+pub const PROT_SEM: usize = 0x8;
+/// Protection flag: Stack growth downwards
 pub const PROT_GROWSDOWN: usize = 0x01000000;
+/// Protection flag: Stack growth upwards
 pub const PROT_GROWSUP: usize = 0x02000000;
 
 /// Mask for type of mapping
@@ -102,6 +130,7 @@ const LEGACY_MAP_MASK: usize =
     MAP_POPULATE | MAP_NONBLOCK | MAP_STACK | MAP_HUGETLB | MAP_32BIT |
     MAP_HUGE_2MB | MAP_HUGE_1GB;
 
+/// Create a new mapping in virtual memory
 pub fn mmap(
     va: usize,
     len: usize,
@@ -329,6 +358,7 @@ fn mmap_base() -> usize {
     STACK_TOP - MIN_GAP
 }
 
+/// Find an unmapped virtual memory area of the requested size
 pub fn get_unmapped_vma(va: usize, len: usize) -> usize {
     debug!("get_unmapped_vma va {:#x} len {:#x}", va, len);
     if va != 0 && find_overlap(va, len).is_none() {
@@ -367,6 +397,7 @@ pub fn get_unmapped_vma(va: usize, len: usize) -> usize {
 #[cfg(target_arch = "riscv64")]
 const SEGV_ACCERR: usize = 2;
 
+/// Handle page faults by mapping pages on demand
 pub fn faultin_page(
     va: usize, cause: usize, epc: usize, fixup: &mut usize,
 ) -> Result<usize, usize> {
@@ -580,6 +611,7 @@ fn fill_cache(pa: usize, len: usize, file: &mut File, offset: usize) {
     buf[pos..].fill(0);
 }
 
+/// Set program break location
 pub fn set_brk(va: usize) -> usize {
     // Have a guard for mm to lock this whole function,
     // because mm.brk() and mm.set_brk() should be in a atomic context.
@@ -604,6 +636,7 @@ pub fn set_brk(va: usize) -> usize {
     }
 }
 
+/// Synchronize a memory mapping with its backing storage
 pub fn msync(va: usize, len: usize, flags: usize) -> usize {
     debug!("msync: va {:#X} len {:#X} flags {:#X}", va, len, flags);
 
@@ -655,6 +688,7 @@ fn sync_file(va: usize, mut len: usize, file: &mut File, offset: usize) {
     debug!("msync: ok!");
 }
 
+/// Remove a mapping from virtual memory
 pub fn munmap(va: usize, mut len: usize) -> usize {
     if !is_aligned_4k(va) || va > TASK_SIZE || len > TASK_SIZE-va {
         return linux_err!(EINVAL);
@@ -704,6 +738,7 @@ pub fn munmap(va: usize, mut len: usize) -> usize {
     0
 }
 
+/// Resize an existing memory mapping
 pub fn mremap(
     oaddr: usize, mut osize: usize, mut nsize: usize, flags: usize, naddr: usize
 ) -> usize {
@@ -758,6 +793,7 @@ fn remove_region(va: usize, len: usize) -> usize {
     0
 }
 
+/// Resize an existing memory mapping
 pub fn mprotect(va: usize, len: usize, prot: usize) -> usize {
     info!("mprotect: va {:#X} len {:#X} prot {:#X}", va, len, prot);
     assert!(is_aligned_4k(va));

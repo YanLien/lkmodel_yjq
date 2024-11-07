@@ -1,3 +1,17 @@
+//! Run queue implementation for task scheduling
+//!
+//! This module implements a CFS (Completely Fair Scheduler) based run queue that:
+//! - Manages task scheduling and switching
+//! - Handles task state transitions
+//! - Implements preemptive scheduling
+//! - Manages CPU time allocation
+//!
+//! The run queue is responsible for:
+//! - Maintaining the list of runnable tasks
+//! - Selecting the next task to run
+//! - Managing context switches between tasks
+//! - Handling task blocking and unblocking
+
 use alloc::sync::Arc;
 use lazy_init::LazyInit;
 use scheduler::BaseScheduler;
@@ -16,7 +30,9 @@ use taskctx::{CtxRef, CurrentCtx};
 type SchedItem = scheduler::CFSTask<CtxRef>;
 type Scheduler = scheduler::CFScheduler<CtxRef>;
 
-// TODO: per-CPU
+/// Global run queue instance
+///
+/// TODO: This should be per-CPU in the future
 pub(crate) static RUN_QUEUE: LazyInit<SpinNoIrq<AxRunQueue>> = LazyInit::new();
 
 /*
@@ -29,22 +45,29 @@ static WAIT_FOR_EXIT: WaitQueue = WaitQueue::new();
 static IDLE_TASK: LazyInit<AxTaskRef> = LazyInit::new();
 */
 
+/// Run queue structure that manages task scheduling
+///
+/// Contains the CFS scheduler and an idle task that runs when no other
+/// tasks are available
 pub struct AxRunQueue {
     scheduler: Scheduler,
     idle: Arc<SchedItem>,
 }
 
 impl AxRunQueue {
+    /// Creates a new run queue with the given idle task
     pub fn new(idle: Arc<SchedInfo>) -> SpinNoIrq<Self> {
         let idle = Arc::new(SchedItem::new(idle));
         let scheduler = Scheduler::new();
         SpinNoIrq::new(Self { scheduler, idle })
     }
 
+    /// Activates a task by adding it to the scheduler
     pub fn activate_task(&mut self, task: CtxRef) {
         self.add_task(task)
     }
 
+    /// Adds a new task to the scheduler
     pub fn add_task(&mut self, task: CtxRef) {
         info!("task spawn: {}", task.tid());
         assert!(task.tid() != 0);
@@ -53,6 +76,7 @@ impl AxRunQueue {
         self.scheduler.add_task(item);
     }
 
+    /// Handles scheduler timer tick
     pub fn scheduler_timer_tick(&mut self) {
         let curr = taskctx::current_ctx();
         if self.scheduler.task_tick(&Arc::new(SchedItem::new(curr.as_ctx_ref().clone()))) {
@@ -67,6 +91,7 @@ impl AxRunQueue {
     }
     */
 
+    /// Attempts to preempt the current task
     pub fn preempt_resched(&mut self) {
         let curr = taskctx::current_ctx();
         if curr.tid() == 0 {
@@ -113,6 +138,7 @@ impl AxRunQueue {
     }
     */
 
+    /// Blocks the current task
     pub fn block_current<F>(&mut self, wait_queue_push: F)
     where
         F: FnOnce(CtxRef),
@@ -131,6 +157,7 @@ impl AxRunQueue {
         self.resched(false);
     }
 
+    /// Unblocks a task, making it ready to run again
     pub fn unblock_task(&mut self, task: CtxRef, resched: bool) {
         info!("task unblock: {}", task.tid());
         assert!(task.tid() != 0);
@@ -162,6 +189,7 @@ impl AxRunQueue {
 }
 
 impl AxRunQueue {
+    /// Performs task rescheduling
     /// Common reschedule subroutine. If `preempt`, keep current task's time
     /// slice, otherwise reset it.
     pub fn resched(&mut self, preempt: bool) {
@@ -180,6 +208,7 @@ impl AxRunQueue {
         self.switch_to(prev, next.inner().clone());
     }
 
+    /// Switches execution from current task to next task
     fn switch_to(&mut self, prev_task: CurrentCtx, next_task: CtxRef) {
         debug!("============ context switch: {} -> {}", prev_task.tid(), next_task.tid());
         next_task.set_preempt_pending(false);

@@ -1,3 +1,22 @@
+//! # fileops
+//!
+//! A no_std file operations library providing filesystem and I/O functionality.
+//!
+//! This crate implements core filesystem operations for a no_std environment, including:
+//! - File descriptor management
+//! - File and directory operations 
+//! - Path manipulation
+//! - Permission handling
+//! - Device file support
+//!
+//! # Core Features
+//! 
+//! - Standard file operations (open, read, write, seek)
+//! - Directory operations (mkdir, rmdir, chdir)
+//! - Symbolic and hard link support
+//! - Permission and ownership management
+//! - Special device files (/dev) support
+
 #![cfg_attr(not(test), no_std)]
 
 #[macro_use]
@@ -37,15 +56,16 @@ use axtype::__O_TMPFILE;
 
 pub type FileRef = Arc<Mutex<File>>;
 
-// Special value used to indicate openat should use
-// the current working directory.
-pub const AT_FDCWD: usize       = -100isize as usize;
+/// Special file descriptor representing current working directory
+pub const AT_FDCWD: usize = -100isize as usize;
+/// Flag to remove directory instead of file
 // Remove directory instead of unlinking file.
-pub const AT_REMOVEDIR: usize   = 0x200;
-pub const AT_EMPTY_PATH: usize  = 0x1000;
+pub const AT_REMOVEDIR: usize = 0x200;
+/// Flag to operate on file descriptor itself
+pub const AT_EMPTY_PATH: usize = 0x1000;
 
+/// Default block size for filesystem operations
 const BLOCK_SIZE: u32 = 4096;
-
 const SEEK_SET: usize = 0;
 const SEEK_CUR: usize = 1;
 const SEEK_END: usize = 2;
@@ -53,6 +73,7 @@ const SEEK_END: usize = 2;
 // dup
 const F_DUPFD: usize = 0;
 
+/// Opens a file relative to a directory file descriptor
 pub fn openat(dfd: usize, filename: &str, flags: usize, mode: usize) -> AxResult<File> {
     info!(
         "openat '{}' at dfd {:#X} flags {:#o} mode {:#o}",
@@ -116,6 +137,7 @@ fn lookup_node(dfd: usize, filename: &str) -> AxResult<VfsNodeRef> {
     fs.lookup(None, &path, 0)
 }
 
+/// Associates file descriptor with provided file
 pub fn register_file(file: AxResult<File>, flags: usize) -> usize {
     let file = match file {
         Ok(f) => f,
@@ -135,6 +157,7 @@ pub fn register_file(file: AxResult<File>, flags: usize) -> usize {
     fd
 }
 
+/// Removes file descriptor and returns associated file
 pub fn unregister_file(fd: usize) -> LinuxResult<Arc<Mutex<File>>> {
     let current = task::current();
     let mut locked_ftable = current.filetable.lock();
@@ -160,6 +183,7 @@ fn handle_path(dfd: usize, filename: &str) -> String {
     String::from(filename)
 }
 
+/// Reads from a file descriptor
 pub fn read(fd: usize, ubuf: &mut [u8]) -> LinuxResult<usize> {
     info!("read ... fd {}", fd);
 
@@ -180,6 +204,7 @@ pub fn read(fd: usize, ubuf: &mut [u8]) -> LinuxResult<usize> {
     Ok(pos)
 }
 
+/// Reads from a file descriptor at given offset
 pub fn pread64(fd: usize, ubuf: &mut [u8], offset: usize) -> LinuxResult<usize> {
     info!("pread64: fd {} len {} offset {}", fd, ubuf.len(), offset);
     let pos = lseek(fd, offset, SEEK_SET);
@@ -187,6 +212,7 @@ pub fn pread64(fd: usize, ubuf: &mut [u8], offset: usize) -> LinuxResult<usize> 
     read(fd, ubuf)
 }
 
+/// Writes to a file descriptor
 pub fn write(fd: usize, ubuf: &[u8]) -> LinuxResult<usize> {
     let count = ubuf.len();
     debug!("write: fd {}, count {} ..", fd as i32, count);
@@ -217,6 +243,7 @@ pub struct iovec {
     iov_len: usize,
 }
 
+/// Writes data from multiple buffers (vectored I/O)
 pub fn writev(fd: usize, iov_array: &[iovec]) -> usize {
     error!("No implementation of writev!");
     assert!(fd == 1 || fd == 2);
@@ -229,6 +256,7 @@ pub fn writev(fd: usize, iov_array: &[iovec]) -> usize {
     iov_array.len()
 }
 
+/// File status structure returned by stat/fstat calls
 #[derive(Debug, Clone, Copy, Default)]
 #[repr(C)]
 pub struct KernelStat {
@@ -252,6 +280,7 @@ pub struct KernelStat {
     pub st_ctime_nsec: isize,
 }
 
+/// Checks if file is accessible
 pub fn faccessat(dfd: usize, path: &str) -> usize {
     match lookup_node(dfd, &path) {
         Ok(_) => {
@@ -263,6 +292,7 @@ pub fn faccessat(dfd: usize, path: &str) -> usize {
     }
 }
 
+/// Changes file mode/permissions relative to a directory file descriptor
 pub fn fchmodat(
     dfd: usize, filename: &str, mode: i32, _flags: usize
 ) -> LinuxResult<usize> {
@@ -280,6 +310,7 @@ pub fn fchmodat(
     Ok(0)
 }
 
+/// Changes file mode/permissions relative to a directory file descriptor
 pub fn fchmod(fd: usize, mode: i32) -> LinuxResult<usize> {
     info!("fchmod fd {:#x} mode {:#o}", fd, mode);
     let current = task::current();
@@ -300,6 +331,7 @@ pub fn fchmod(fd: usize, mode: i32) -> LinuxResult<usize> {
     Ok(0)
 }
 
+/// Changes ownership of an open file descriptor
 pub fn fchown(fd: usize, uid: u32, gid: u32) -> LinuxResult<usize> {
     info!("fchown fd {:#X} owner:group {}:{}", fd, uid, gid);
     let current = task::current();
@@ -316,6 +348,7 @@ pub fn fchown(fd: usize, uid: u32, gid: u32) -> LinuxResult<usize> {
     Ok(0)
 }
 
+/// Changes ownership of a file relative to a directory file descriptor
 pub fn fchownat(
     dfd: usize, filename: &str, uid: u32, gid: u32, flags: usize
 ) -> LinuxResult<usize> {
@@ -332,6 +365,7 @@ pub fn fchownat(
     Ok(0)
 }
 
+/// Creates internal file attributes
 fn mk_attr(uid: u32, gid: u32) -> (VfsNodeAttr, VfsNodeAttrValid) {
     let mut attr = VfsNodeAttr::default();
     let mut valid = VfsNodeAttrValid::empty();
@@ -346,6 +380,7 @@ fn mk_attr(uid: u32, gid: u32) -> (VfsNodeAttr, VfsNodeAttrValid) {
     (attr, valid)
 }
 
+/// Gets information about a file
 pub fn fstatat(dfd: usize, path: usize, statbuf_ptr: usize, flags: usize) -> usize {
     let statbuf = statbuf_ptr as *mut KernelStat;
 
@@ -426,6 +461,7 @@ fn fstatat_stdio(_dfd: usize, path: usize, statbuf: *mut KernelStat, _flags: usi
     return 0;
 }
 
+/// Performs device-specific operations
 pub fn ioctl(fd: usize, request: usize, udata: usize) -> LinuxResult<usize> {
     info!(
         "linux_syscall_ioctl fd {}, request {:#X}, udata {:#X}",
@@ -441,6 +477,7 @@ pub fn ioctl(fd: usize, request: usize, udata: usize) -> LinuxResult<usize> {
     Ok(ret)
 }
 
+/// Creates a special file node
 pub fn mknodat(dfd: usize, filename: &str, mode: usize, dev: usize) -> usize {
     info!(
         "mknodat: dfd {:#x}, filename {}, mode {:#o}, dev {:#x}",
@@ -473,6 +510,7 @@ pub fn mknodat(dfd: usize, filename: &str, mode: usize, dev: usize) -> usize {
     0
 }
 
+/// Creates a directory
 pub fn mkdirat(dfd: usize, pathname: &str, mode: usize) -> usize {
     info!(
         "mkdirat: dfd {:#X}, pathname {}, mode {:#X}",
@@ -490,6 +528,7 @@ pub fn mkdirat(dfd: usize, pathname: &str, mode: usize) -> usize {
     }
 }
 
+/// Reads value of symbolic link
 pub fn readlinkat(
     dfd: usize, filename: &str, buf: usize, size: usize
 ) -> LinuxResult<usize> {
@@ -522,6 +561,7 @@ pub fn readlinkat(
     */
 }
 
+/// Creates a hard link
 pub fn linkat(
     olddfd: usize, oldpath: &str,
     newdfd: usize, newpath: &str,
@@ -539,6 +579,7 @@ pub fn linkat(
     Ok(0)
 }
 
+/// Creates a symbolic link
 pub fn symlinkat(target: &str, newdfd: usize, linkpath: &str) -> usize {
     info!("symlinkat: target {}, newdfd {:#x}, linkpath: {}",
         target, newdfd, linkpath);
@@ -552,6 +593,7 @@ pub fn symlinkat(target: &str, newdfd: usize, linkpath: &str) -> usize {
     0
 }
 
+/// Deletes a file or directory entry
 pub fn unlinkat(dfd: usize, path: &str, flags: usize) -> usize {
     info!("unlinkat: dfd {:#X}, path {}, flags {:#x}", dfd, path, flags);
     assert_eq!(dfd, AT_FDCWD);
@@ -587,6 +629,7 @@ pub fn unlinkat(dfd: usize, path: &str, flags: usize) -> usize {
     }
 }
 
+/// Gets current working directory
 pub fn getcwd(buf: &mut [u8]) -> usize {
     let cwd = _getcwd();
     info!("getcwd {}", cwd);
@@ -603,6 +646,7 @@ fn _getcwd() -> String {
     fs.current_dir().expect("bad cwd")
 }
 
+/// Changes current working directory
 pub fn chdir(path: &str) -> usize {
     let current = task::current();
     info!("===========> chdir: {}", path);
@@ -613,6 +657,7 @@ pub fn chdir(path: &str) -> usize {
     }
 }
 
+/// Moves file pointer
 pub fn lseek(fd: usize, offset: usize, whence: usize) -> usize {
     info!("lseek: fd: {} offset: {} whence: {}", fd, offset, whence);
 
@@ -633,6 +678,7 @@ pub fn lseek(fd: usize, offset: usize, whence: usize) -> usize {
     }
 }
 
+/// Truncates a file to specified length
 pub fn ftruncate(fd: usize, length: usize) -> usize {
     info!("ftruncate: fd: {} length: {}", fd, length);
 
@@ -644,6 +690,7 @@ pub fn ftruncate(fd: usize, length: usize) -> usize {
     0
 }
 
+/// Pre-allocates space for a file
 pub fn fallocate(fd: usize, mode: usize, offset: usize, len: usize) -> LinuxResult<usize> {
     info!("fallocate: fd {} mode {:#o} offset {:#x}, len {:#x}",
         fd, mode, offset, len);
@@ -657,6 +704,7 @@ pub fn fallocate(fd: usize, mode: usize, offset: usize, len: usize) -> LinuxResu
     Ok(0)
 }
 
+/// Opens a file
 pub fn do_open(filename: &str, flags: i32) -> LinuxResult<FileRef> {
     debug!("do_open path {}", filename);
 
@@ -674,6 +722,7 @@ pub fn do_open(filename: &str, flags: i32) -> LinuxResult<FileRef> {
     Ok(Arc::new(Mutex::new(file)))
 }
 
+/// Gets file type from path
 pub fn filetype(fname: &str) -> LinuxResult<VfsNodeType> {
     let mut opts = OpenOptions::new();
     opts.read(true);
@@ -686,6 +735,7 @@ pub fn filetype(fname: &str) -> LinuxResult<VfsNodeType> {
     Ok(metadata.file_type())
 }
 
+/// Manipulates file descriptor
 pub fn fcntl(fd: usize, cmd: usize, udata: usize) -> usize {
     //assert_eq!(F_DUPFD, cmd);
     if cmd != F_DUPFD {
@@ -702,6 +752,7 @@ pub fn fcntl(fd: usize, cmd: usize, udata: usize) -> usize {
     new_fd
 }
 
+/// Duplicates a file descriptor
 pub fn dup(fd: usize) -> usize {
     info!("dup [{:#x}] ...", fd);
     let cur = task::current();
@@ -712,6 +763,7 @@ pub fn dup(fd: usize) -> usize {
     new_fd
 }
 
+/// Duplicates file descriptor to specific number
 pub fn dup3(oldfd: usize, newfd: usize, flags: usize) -> usize {
     assert_eq!(flags, 0);
     info!("dup3 [{:#x}, {:#x}, {:#x}] ...", oldfd, newfd, flags);
@@ -722,6 +774,7 @@ pub fn dup3(oldfd: usize, newfd: usize, flags: usize) -> usize {
     newfd
 }
 
+/// Gets directory entries
 pub fn getdents64(fd: usize, dirp: usize, count: usize) -> usize {
     info!("getdents64 fd {}...", fd);
     let current = task::current();
@@ -739,6 +792,7 @@ pub fn getdents64(fd: usize, dirp: usize, count: usize) -> usize {
     ret
 }
 
+/// Transfers data between file descriptors
 pub fn sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usize) -> usize {
     info!("sendfile outfd {} infd {} offset {} count {:#x}",
         out_fd, in_fd, offset, count);
@@ -766,6 +820,7 @@ pub fn sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usize) -> usi
     pos
 }
 
+/// Gets filesystem statistics
 pub fn statfs(path: &str, buf: usize) -> usize {
     info!("statfs: path {}...", path);
     let current = task::current();
@@ -779,6 +834,7 @@ pub fn statfs(path: &str, buf: usize) -> usize {
     0
 }
 
+/// Updates file timestamps
 pub fn utimensat(dfd: usize, filename: &str, times: usize, flags: usize) -> usize {
     let path = handle_path(dfd, filename);
     error!("utimensat: dfd {:#x} path {} times {} flags {}",
@@ -787,6 +843,7 @@ pub fn utimensat(dfd: usize, filename: &str, times: usize, flags: usize) -> usiz
     0
 }
 
+/// Creates a pipe
 pub fn pipe2(fds: usize, flags: usize) -> LinuxResult {
     debug!("pipe2: fds {:#x} flags {:#x}", fds, flags);
     let current = task::current();
@@ -807,6 +864,7 @@ pub fn pipe2(fds: usize, flags: usize) -> LinuxResult {
     Ok(())
 }
 
+/// Mounts a filesystem
 pub fn mount(fsname: &str, dir: &str, fstype: &str, flags: usize, data: usize) -> LinuxResult<usize> {
     info!("mount: name {} dir {} ty {} flags {:#x} data {:#x}",
         fsname, dir, fstype, flags, data);
@@ -826,11 +884,13 @@ pub fn mount(fsname: &str, dir: &str, fstype: &str, flags: usize, data: usize) -
     Ok(0)
 }
 
+// Gets file descriptor file size
 fn file_size(file: FileRef) -> LinuxResult<usize> {
     let metadata = file.lock().get_attr()?;
     Ok(metadata.size() as usize)
 }
 
+/// Sets up console devices for standard I/O
 // Open /dev/console, for stdin/stdout/stderr, this should never fail
 pub fn console_on_rootfs() -> LinuxResult {
     let mut opts = OpenOptions::new();
@@ -852,6 +912,7 @@ pub fn console_on_rootfs() -> LinuxResult {
     Ok(())
 }
 
+/// Initializes loop devices
 pub fn loop_init() -> LinuxResult {
     let loop_ctl = LoopCtlDev::new();
 
@@ -867,6 +928,7 @@ pub fn loop_init() -> LinuxResult {
     Ok(())
 }
 
+/// Initializes file operations subsystem
 pub fn init(cpu_id: usize, dtb_pa: usize) {
     axconfig::init_once!();
     info!("Initialize file ops ...");

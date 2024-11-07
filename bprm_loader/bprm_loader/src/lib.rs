@@ -1,3 +1,23 @@
+//! ELF binary program loader implementation
+//!
+//! This module provides functionality for loading and executing ELF binaries, including:
+//! - Program execution (execve)
+//! - Dynamic linking support
+//! - Stack setup and argument passing
+//! - Memory mapping of program segments
+//!
+//! # Features
+//! - ELF binary parsing and loading
+//! - Dynamic interpreter (ld.so) support
+//! - Proper stack setup for user programs
+//! - Security checks and validations
+//!
+//! # Core Components
+//! - Program execution interface
+//! - ELF loader implementation
+//! - Stack and argument setup
+//! - Memory management integration
+
 #![no_std]
 #![feature(cstr_count_bytes)]
 
@@ -40,14 +60,17 @@ pub fn execve(
     exec_binprm(filename, file, argv, envp)
 }
 
+// Opens executable file
 fn do_open_execat(filename: &str, _flags: usize) -> LinuxResult<FileRef> {
     fileops::do_open(filename, _flags as i32)
 }
 
+// Execute binary with given parameters
 fn exec_binprm(filename: &str, file: FileRef, argv: Vec<String>, envp: Vec<String>) -> LinuxResult<(usize, usize)> {
     load_elf_binary(filename, file, argv, envp)
 }
 
+/// Calculate total size needed for mapping program segments
 fn total_mapping_size(phdrs: &Vec<ProgramHeader>) -> usize {
     let mut first = usize::MAX;
     let mut last = usize::MAX;
@@ -65,6 +88,7 @@ fn total_mapping_size(phdrs: &Vec<ProgramHeader>) -> usize {
     (phdrs[last].p_vaddr + phdrs[last].p_memsz) as usize - start
 }
 
+// Load and set up interpreter (dynamic linker)
 fn load_elf_interp(
     file: FileRef,
     _app_entry: usize,
@@ -141,10 +165,12 @@ fn elf_page_offset(va: u64) -> u64 {
     va & (PAGE_SIZE-1) as u64
 }
 
+/// Check if given address could cause buffer overflow
 fn bad_addr(va: usize) -> bool {
     va >= TASK_SIZE
 }
 
+// Map ELF segment into memory
 fn elf_map(
     phdr: &ProgramHeader,
     mut va: usize,
@@ -181,6 +207,7 @@ fn elf_map(
     }
 }
 
+// Load an ELF binary into memory
 fn load_elf_binary(
     filename: &str, file: FileRef, argv: Vec<String>, envp: Vec<String>
 ) -> LinuxResult<(usize, usize)> {
@@ -308,16 +335,19 @@ fn load_elf_binary(
     Ok((elf_entry, sp))
 }
 
+// Set up architecture-specific pages (like vDSO)
 fn arch_setup_additional_pages() {
     // Todo: implement it. setup vdso pages.
     let _ = mmap::_mmap(0, 0x2000, PROT_READ | PROT_EXEC, MAP_ANONYMOUS, None, 0);
 }
 
+// Create ELF auxiliary tables
 fn create_elf_tables(e_phnum: usize, interp_load_addr: usize, e_entry: usize, phdr_addr: usize) {
     debug!("create_elf_tables: e_phum {:#x}, interp_load_addr {:#x} e_entry {:#x} phdr_addr {:#x}",
            e_phnum, interp_load_addr, e_entry, phdr_addr);
 }
 
+// Zero out BSS section
 fn padzero(elf_bss: usize) {
     let nbyte = elf_bss & (PAGE_SIZE - 1);
     info!("padzero nbyte: {:#X} ...", elf_bss);
@@ -328,6 +358,7 @@ fn padzero(elf_bss: usize) {
     }
 }
 
+// Set up program break
 fn set_brk(elf_bss: usize, elf_brk: usize) {
     let elf_bss = align_up_4k(elf_bss);
     let elf_brk = align_up_4k(elf_brk);
@@ -347,6 +378,7 @@ fn set_brk(elf_bss: usize, elf_brk: usize) {
     task::current().mm().lock().set_brk(elf_brk as usize)
 }
 
+// Calculate protection flags from ELF segment flags
 #[inline]
 fn make_prot(pflags: u32) -> usize {
     let mut prot = 0;
@@ -364,6 +396,7 @@ fn make_prot(pflags: u32) -> usize {
     prot
 }
 
+// Load program headers from ELF file
 fn load_elf_phdrs(file: FileRef) -> LinuxResult<(Vec<ProgramHeader>, usize, usize, usize)> {
     let mut file = file.lock();
     let mut buf: [u8; ELF_HEAD_BUF_SIZE] = [0; ELF_HEAD_BUF_SIZE];
@@ -435,6 +468,7 @@ const AT_EXECFN : usize = 31;   /* filename of program */
 
 const MAX_ARG_STRLEN: usize = PAGE_SIZE;
 
+// Create new auxiliary vector entry
 fn new_aux_ent(elf_info: &mut Vec<usize>, id: usize, val: usize) {
     elf_info.push(id);
     elf_info.push(val);
@@ -568,12 +602,14 @@ fn show_mem(mut pos: usize) {
 }
 */
 
+// Write value to user space
 fn put_user(val: usize, pos: usize) -> usize {
     let ptr = pos as *mut usize;
     unsafe { *ptr = val; }
     pos + 8
 }
 
+// Calculate string length with maximum limit
 fn strnlen_user(pos: usize, max: usize) -> usize {
     use core::ffi::CStr;
     use core::ffi::c_char;
@@ -585,6 +621,7 @@ fn strnlen_user(pos: usize, max: usize) -> usize {
     }
 }
 
+// Copy data to user space
 fn copy_to_user(pos: usize, vsrc: &Vec<usize>) -> usize {
     let ptr = pos as *mut usize;
     unsafe {
@@ -594,6 +631,7 @@ fn copy_to_user(pos: usize, vsrc: &Vec<usize>) -> usize {
     pos + vsrc.len() * 8
 }
 
+/// Initialize the binary loader
 pub fn init(cpu_id: usize, dtb_pa: usize) {
     axconfig::init_once!();
 
