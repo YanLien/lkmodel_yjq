@@ -66,10 +66,10 @@ pub mod irq {
     /// Enables or disables the given IRQ.
     pub fn set_enable(irq_num: usize, enabled: bool) {}
 
-    /// Registers an IRQ handler for the given IRQ.
-    pub fn register_handler(irq_num: usize, handler: crate::irq::IrqHandler) -> bool {
-        false
-    }
+    // /// Registers an IRQ handler for the given IRQ.
+    // pub fn register_handler(irq_num: usize, handler: crate::irq::IrqHandler) -> bool {
+    //     false
+    // }
 
     /// Dispatches the IRQ.
     ///

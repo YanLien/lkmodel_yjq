@@ -29,8 +29,10 @@ use axerrno::{LinuxResult, LinuxError, linux_err};
 use axfile::fops::File;
 use axhal::arch::STACK_TOP;
 use axhal::mem::{phys_to_virt, virt_to_phys};
+#[cfg(target_arch = "riscv64")]
 use axhal::arch::user_mode;
 use axio::SeekFrom;
+use signal::force_sig_fault;
 use core::ops::Bound;
 use memory_addr::{align_up_4k, align_down_4k, is_aligned_4k, PAGE_SHIFT, PAGE_SIZE_4K};
 pub use mm::FileRef;
@@ -41,8 +43,8 @@ use mm::{VM_MAYREAD, VM_MAYWRITE, VM_MAYEXEC};
 use mm::{VM_GROWSDOWN, VM_LOCKED, VM_SYNC};
 #[cfg(target_arch = "riscv64")]
 use axhal::arch::{EXC_INST_PAGE_FAULT, EXC_LOAD_PAGE_FAULT, EXC_STORE_PAGE_FAULT};
-#[cfg(target_arch = "riscv64")]
-use signal::force_sig_fault;
+// #[cfg(target_arch = "riscv64")]
+// use signal::force_sig_fault;
 use capability::Cap;
 use axhal::arch::flush_tlb;
 
@@ -394,7 +396,6 @@ pub fn get_unmapped_vma(va: usize, len: usize) -> usize {
 }
 
 // invalid permissions for mapped object
-#[cfg(target_arch = "riscv64")]
 const SEGV_ACCERR: usize = 2;
 
 /// Handle page faults by mapping pages on demand

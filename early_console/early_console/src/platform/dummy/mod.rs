@@ -1,16 +1,18 @@
 #![allow(unused_variables)]
 #![allow(dead_code)]
 
-pub mod console {
-    /// Writes a byte to the console.
-    pub fn putchar(c: u8) {
-        unimplemented!()
-    }
+/// Writes a byte to the console.
+pub fn putchar(c: u8) {
+    unimplemented!()
+}
 
-    /// Reads a byte from the console, or returns [`None`] if no input is available.
-    pub fn getchar() -> Option<u8> {
-        unimplemented!()
-    }
+/// Reads a byte from the console, or returns [`None`] if no input is available.
+pub fn getchar() -> Option<u8> {
+    unimplemented!()
+}
+
+pub fn console_init() {
+    unimplemented!()
 }
 
 pub mod misc {
@@ -24,13 +26,6 @@ pub mod misc {
 pub mod mp {
     /// Starts the given secondary CPU with its boot stack.
     pub fn start_secondary_cpu(cpu_id: usize, stack_top: crate::mem::PhysAddr) {}
-}
-
-pub mod mem {
-    /// Returns platform-specific memory regions.
-    pub(crate) fn platform_regions() -> impl Iterator<Item = crate::mem::MemRegion> {
-        core::iter::empty()
-    }
 }
 
 pub mod time {

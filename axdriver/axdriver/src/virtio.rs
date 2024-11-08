@@ -13,9 +13,9 @@ cfg_if! {
     if #[cfg(bus = "pci")] {
         use driver_pci::{PciRoot, DeviceFunction, DeviceFunctionInfo};
         type VirtIoTransport = driver_virtio::PciTransport;
-    } else if #[cfg(bus =  "mmio")] {
+    } else if #[cfg(bus = "mmio")] {
         type VirtIoTransport = driver_virtio::MmioTransport;
-    }
+    } 
 }
 
 /// A trait for VirtIO device meta information.

@@ -55,6 +55,7 @@
 #![feature(asm_const)]
 
 pub use kernel_guard_base::BaseGuard;
+use kernel_guard_base::NoOp;
 
 mod arch;
 

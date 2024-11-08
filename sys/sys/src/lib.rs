@@ -87,6 +87,8 @@ pub fn prlimit64(tid: Tid, resource: usize, new_rlim: usize, old_rlim: usize) ->
 
 #[cfg(target_arch = "x86_64")]
 pub fn arch_prctl(code: usize, addr: usize) -> usize {
+    use axerrno::linux_err;
+
     let ctx = taskctx::current_ctx();
     match code {
         ARCH_SET_FS => {

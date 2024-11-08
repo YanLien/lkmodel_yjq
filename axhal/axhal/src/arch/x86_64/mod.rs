@@ -131,6 +131,6 @@ pub fn local_flush_icache_all() {
 }
 
 pub fn early_init() {
-    crate::x86_64::dtables::init_primary();
-    crate::x86_64::time::init_early();
+    // crate::x86_64::dtables::init_primary();
+    // crate::x86_64::time::init_early();
 }
