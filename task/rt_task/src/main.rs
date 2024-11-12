@@ -9,7 +9,7 @@ use core::panic::PanicInfo;
 
 /// Entry
 #[no_mangle]
-pub extern "Rust" fn runtime_main(cpu_id: usize, _dtb_pa: usize) {
+pub extern "Rust" fn runtime_main(cpu_id: usize, dtb_pa: usize) {
     assert_eq!(cpu_id, 0);
 
     axlog2::init("debug");
@@ -20,7 +20,7 @@ pub extern "Rust" fn runtime_main(cpu_id: usize, _dtb_pa: usize) {
     axalloc::init();
     page_table::init();
 
-    task::init();
+    task::init(cpu_id, dtb_pa);
 
     info!("[rt_task]: ok!");
     axhal::misc::terminate();

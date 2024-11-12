@@ -1,3 +1,15 @@
+//! Filesystem mounting and initialization for embedded systems.
+//!
+//! This crate provides functionality to initialize and mount various filesystems
+//! in a no_std environment. It supports different filesystem types including ext2,
+//! FAT, and custom filesystems, as well as virtual filesystems like devfs and sysfs.
+//!
+//! # Features
+//! * Multiple filesystem support (ext2, FAT, custom)
+//! * Virtual filesystem mounting (devfs, sysfs, ramfs)
+//! * Block device management
+//! * Root filesystem initialization
+
 #![no_std]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(maybe_uninit_array_assume_init)]
@@ -28,7 +40,7 @@ cfg_if::cfg_if! {
     }
 }
 
-/// Initializes filesystems by block devices.
+/// Initializes the main filesystem using available block devices.
 pub fn init_filesystems(mut blk_devs: AxDeviceContainer<AxBlockDevice>, _need_fmt: bool) -> FsType {
     info!("Initialize filesystems...");
 
@@ -52,6 +64,8 @@ pub fn init_filesystems(mut blk_devs: AxDeviceContainer<AxBlockDevice>, _need_fm
     main_fs
 }
 
+
+/// Initializes and configures the root filesystem with various mount points.
 pub fn init_rootfs(main_fs: Arc<dyn VfsOps>) -> Arc<RootDirectory> {
     let uid = 0;
     let gid = 0;
@@ -87,6 +101,7 @@ pub fn init_rootfs(main_fs: Arc<dyn VfsOps>) -> Arc<RootDirectory> {
     Arc::new(root_dir)
 }
 
+/// Initializes the entire filesystem hierarchy.
 pub fn init(_cpu_id: usize, _dtb_pa: usize) {
     axconfig::init_once!();
 
@@ -95,6 +110,7 @@ pub fn init(_cpu_id: usize, _dtb_pa: usize) {
     INIT_ROOT.init_by(init_rootfs(main_fs));
 }
 
+/// Returns a reference to the initialized root directory.
 pub fn init_root() -> Arc<RootDirectory> {
     INIT_ROOT.clone()
 }

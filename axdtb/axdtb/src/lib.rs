@@ -1,3 +1,10 @@
+//! A no_std Device Tree Binary (DTB) parser implementation.
+//! 
+//! This crate provides functionality to parse Device Tree Binary (DTB) files in a no_std environment.
+//! The parser supports DTB format version 17 and provides a safe interface to traverse the device tree
+//! structure while extracting property values.
+//!
+
 #![no_std]
 
 use core::str;
@@ -15,6 +22,7 @@ const OF_DT_BEGIN_NODE : u32 = 0x00000001;
 const OF_DT_END_NODE   : u32 = 0x00000002;
 const OF_DT_PROP       : u32 = 0x00000003;
 
+/// Represents possible errors that can occur during DTB parsing.
 #[derive(Debug)]
 pub enum DeviceTreeError {
     BadMagicNumber,
@@ -26,6 +34,9 @@ pub enum DeviceTreeError {
 
 pub type DeviceTreeResult<T> = Result<T, DeviceTreeError>;
 
+/// Main structure representing a Device Tree Binary.
+///
+/// Contains information about the DTB header and provides methods to parse the tree structure.
 pub struct DeviceTree {
     ptr: usize,
     totalsize: usize,
@@ -34,6 +45,7 @@ pub struct DeviceTree {
 }
 
 impl DeviceTree {
+    /// Initialize a new DeviceTree instance from a memory address.
     pub fn init(ptr: usize) -> DeviceTreeResult<Self> {
         let buf = unsafe {
             core::slice::from_raw_parts(ptr as *const u8, 24)
@@ -57,6 +69,7 @@ impl DeviceTree {
 }
 
 impl DeviceTree {
+    /// Parse the device tree structure and invoke a callback for each node.
     pub fn parse(
         &self, mut pos: usize,
         mut addr_cells: usize,
@@ -127,6 +140,7 @@ impl From<str::Utf8Error> for DeviceTreeError {
     }
 }
 
+/// Convenience function to parse a DTB and process its nodes.
 pub fn parse<F>(dtb_va: usize, mut cb: F)
 where F: FnMut(String, usize, usize, Vec<(String, Vec<u8>)>)
 {

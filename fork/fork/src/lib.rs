@@ -1,3 +1,18 @@
+//! Process and thread creation/cloning functionality for a no_std environment.
+//!
+//! This module provides implementations for process and thread creation operations similar to Linux's
+//! clone() system call. It supports various cloning modes including fork, vfork, and thread creation
+//! with configurable sharing of resources between parent and child processes/threads.
+//!
+//! # Features
+//! - Process creation with configurable resource sharing
+//! - Thread creation with shared address space
+//! - Support for Linux-compatible clone flags
+//! - Virtual memory management during process creation
+//! - File descriptor inheritance control
+//! - Signal handling inheritance
+//! - Thread Local Storage (TLS) support
+
 #![no_std]
 
 mod arch;
@@ -15,7 +30,10 @@ use spinbase::SpinNoIrq;
 use task::SIGCHLD;
 
 bitflags::bitflags! {
-    /// clone flags
+    /// Clone flags that control the behavior of process/thread creation.
+    ///
+    /// These flags determine which resources are shared between the parent and child
+    /// processes/threads, matching the semantics of Linux's clone system call.
     #[derive(Debug, Copy, Clone)]
     pub struct CloneFlags: usize {
         /// signal mask to be sent at exit
@@ -48,6 +66,7 @@ bitflags::bitflags! {
     }
 }
 
+/// Internal structure containing arguments for the kernel clone operation.
 struct KernelCloneArgs {
     flags: CloneFlags,
     _name: String,
@@ -286,7 +305,7 @@ impl KernelCloneArgs {
     }
 }
 
-/// Create a user mode thread.
+/// Creates a new user mode thread with the specified function and flags.
 ///
 /// Invoke `f` to do some preparations before entering userland.
 pub fn user_mode_thread<F>(f: F, flags: CloneFlags) -> Tid
@@ -310,7 +329,7 @@ where
     args.perform().expect("kernel_clone failed.")
 }
 
-///
+
 /// Clone thread according to SysCall requirements
 ///
 pub fn sys_clone(
@@ -333,6 +352,7 @@ pub fn sys_clone(
     args.perform().unwrap_or(usize::MAX)
 }
 
+/// System call interface for vfork operation.
 #[cfg(target_arch = "x86_64")]
 pub fn sys_vfork() -> usize {
     let flags = CloneFlags::CLONE_VFORK | CloneFlags::CLONE_VM;
@@ -340,6 +360,7 @@ pub fn sys_vfork() -> usize {
     args.perform().unwrap_or(usize::MAX)
 }
 
+/// Sets the clear child TID address for the current thread.
 pub fn set_tid_address(tidptr: usize) -> usize {
     info!("set_tid_address: tidptr {:#X}", tidptr);
     let mut ctx = taskctx::current_ctx();
@@ -347,6 +368,7 @@ pub fn set_tid_address(tidptr: usize) -> usize {
     ctx.tid()
 }
 
+/// Initializes the process/thread management subsystem.
 pub fn init(cpu_id: usize, dtb_pa: usize) {
     axconfig::init_once!();
 

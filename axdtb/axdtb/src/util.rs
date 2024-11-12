@@ -1,12 +1,21 @@
 use crate::{DeviceTreeResult, DeviceTreeError};
 
+/// A trait for safely reading binary data from a slice.
+///
+/// This trait provides methods to read big-endian integers and null-terminated strings
+/// from a byte slice, with bounds checking to ensure memory safety.
 pub trait SliceRead {
+    /// Reads a big-endian 32-bit unsigned integer from the slice at the specified position.
     fn read_be_u32(&self, pos: usize) -> DeviceTreeResult<u32>;
+    /// Reads a big-endian 64-bit unsigned integer from the slice at the specified position.
     fn read_be_u64(&self, pos: usize) -> DeviceTreeResult<u64>;
+    /// Reads a null-terminated byte string from the slice at the specified position.
     fn read_bstring0(&self, pos: usize) -> DeviceTreeResult<&[u8]>;
+    /// Creates a sub-slice from the given start position and length.
     fn subslice(&self, start: usize, len: usize) -> DeviceTreeResult<&[u8]>;
 }
 
+/// Implementation of SliceRead for byte slices.
 impl<'a> SliceRead for &'a [u8] {
     fn read_be_u32(&self, pos: usize) -> DeviceTreeResult<u32> {
         // check size is valid

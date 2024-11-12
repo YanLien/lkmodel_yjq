@@ -10,7 +10,6 @@
 //! - No standard library dependency
 //! - Automatic alignment handling
 //! - Safe memory operations
-//! - Support for various data types
 //!
 
 #![no_std]
