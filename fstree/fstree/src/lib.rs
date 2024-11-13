@@ -25,6 +25,7 @@ use spinpreempt::SpinLock;
 use axfs_vfs::RootDirectory;
 use axtype::O_NOFOLLOW;
 use lazy_init::LazyInit;
+use alloc::vec::Vec;
 
 /// Represents the filesystem context for a process
 pub struct FsStruct {
@@ -146,6 +147,46 @@ impl FsStruct {
 
     /// Creates a new directory
     pub fn create_dir(&self, dir: Option<&VfsNodeRef>, path: &str, uid: u32, gid: u32, mode: i32) -> AxResult {
+        if path.is_empty() {
+            return ax_err!(InvalidInput);
+        }
+    
+        if let Ok(_) = self.lookup(dir, path, 0) {
+            return ax_err!(AlreadyExists);
+        }
+    
+        let components: Vec<&str> = path.trim_matches('/')
+                                       .split('/')
+                                       .filter(|s| !s.is_empty())
+                                       .collect();
+                                    
+        debug!("create_dir: {:?} ..", components);
+        
+        if components.is_empty() {
+            return ax_err!(InvalidInput);
+        }
+
+        // 获取父目录路径
+        let parent_path = if components.len() > 1 {
+            components[..components.len()-1].join("/")
+        } else {
+            String::new()
+        };
+
+        // 检查父目录
+        if !parent_path.is_empty() {
+            match self.lookup(dir, &parent_path, 0) {
+                Ok(node) => {
+                    // 确保是目录
+                    if !node.get_attr()?.is_dir() {
+                        return ax_err!(NotADirectory);
+                    }
+                },
+                Err(_) => return ax_err!(NotFound), // 父目录不存在且非递归模式
+            }
+        }
+        
+        // 在已存在的父目录下创建目标目录
         match self.lookup(dir, path, 0) {
             Ok(_) => ax_err!(AlreadyExists),
             Err(AxError::NotFound) => self.parent_node_of(dir, path).create(path, VfsNodeType::Dir, uid, gid, mode),
